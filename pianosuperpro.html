@@ -1,0 +1,1408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Touch Piano SuperPro (88 + Zoom + MIDI Jump + Raising Bars)</title>
+  <style>
+    :root{
+      --bg:#0b0b0b; --ui:#eaeaea;
+      --card:#141414; --border:#2a2a2a;
+
+      --white:#f7f7f7; --whitePressed:#dcdcdc; --whiteText:#1d1d1d;
+      --black:#111; --blackPressed:#444; --blackText:#ddd;
+
+      --shadow: 0 12px 30px rgba(0,0,0,.35);
+      --radius: 12px;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ui);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .app {
+      height: 100%;
+      display: grid;
+      grid-template-rows: 1fr 1.2fr; /* top area + keyboard area */
+    }
+
+    /* ===== Top Area ===== */
+    .topArea {
+      position: relative;
+      border-bottom: 1px solid #171717;
+      overflow: hidden;
+      background: #070707;
+    }
+
+    .topbar {
+      height: 100%;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      flex-wrap: wrap;
+      box-sizing: border-box;
+    }
+
+    .leftInfo { display:flex; flex-direction:column; gap:6px; min-width: 280px; }
+    .hint { opacity:.9; font-size: 13px; line-height: 1.25; }
+    .status { opacity:.85; font-size: 12px; }
+
+    .controls {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap: wrap;
+      justify-content:flex-end;
+    }
+
+    .group {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap: wrap;
+    }
+
+    label { display:inline-flex; align-items:center; gap:6px; font-size:12px; opacity:.95; }
+    input[type="range"] { width: 170px; }
+    select, input[type="color"]{
+      background:#111; color:var(--ui);
+      border:1px solid #333; border-radius:8px;
+      padding:6px 8px;
+      outline:none;
+    }
+
+    button {
+      background:#1b1b1b; color:var(--ui);
+      border:1px solid #333;
+      border-radius:8px;
+      padding:7px 10px;
+      cursor:pointer;
+    }
+    button:active { transform: translateY(1px); }
+    button.primary { border-color:#555; }
+    button.warn { border-color:#7a2a2a; }
+
+    details {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 10px;
+      color: var(--ui);
+    }
+    summary { cursor: pointer; font-size: 12px; opacity: .95; }
+
+    .advGrid {
+      margin-top: 8px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(170px, 1fr));
+      gap: 10px;
+      align-items: center;
+    }
+    .advGrid .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+    .advGrid small { opacity:.8; }
+
+    .badge {
+      font-size: 12px;
+      opacity: .85;
+    }
+
+    /* ===== Bars Mode ===== */
+    .barsCanvas {
+      position: absolute;
+      inset: 0;
+      display: none;
+      background: #000;
+    }
+
+    .cornerBtn {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 30;
+      display: none; /* shown only in bars mode */
+      gap: 8px;
+      align-items: center;
+    }
+
+    .menuBtn {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      font-size: 18px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border: 1px solid #444;
+      background: rgba(20,20,20,.9);
+      backdrop-filter: blur(6px);
+    }
+
+    .cornerPanel {
+      position: absolute;
+      top: 60px;
+      left: 10px;
+      z-index: 30;
+      width: min(560px, calc(100vw - 20px));
+      max-height: calc(100% - 70px);
+      overflow: auto;
+      display: none;
+      background: rgba(20,20,20,.92);
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .cornerPanel .panelRow {
+      display:flex;
+      gap:10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .cornerPanel .panelRow:last-child { margin-bottom: 0; }
+
+    /* ===== Keyboard Area ===== */
+    .pianoWrap {
+      padding: 10px;
+      box-sizing: border-box;
+      display:flex;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+
+    .keyboard {
+      position: relative;
+      flex: 1;
+      max-width: 1900px;
+      margin: 0 auto;
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      background: #000;
+      border: 1px solid #151515;
+    }
+
+    .white-keys {
+      position:relative;
+      display:flex;
+      width:100%;
+      height:100%;
+    }
+
+    .white-key{
+      flex:1;
+      background: var(--white);
+      border: 1px solid #111;
+      border-left: none;
+      display:flex;
+      align-items:flex-end;
+      justify-content:center;
+      padding-bottom: 10px;
+      box-sizing:border-box;
+      color: var(--whiteText);
+      font-size: 13px;
+      outline:none;
+    }
+    .white-key:first-child { border-left: 1px solid #111; }
+    .white-key.pressed { background: var(--whitePressed); }
+
+    .black-keys{
+      pointer-events:none;
+      position:absolute;
+      top:0; left:0; right:0;
+      height:62%;
+    }
+    .black-key{
+      pointer-events:auto;
+      position:absolute;
+      top:0;
+      height:100%;
+      transform: translateX(-50%);
+      background: var(--black);
+      border-radius: 0 0 10px 10px;
+      box-shadow: 0 8px 14px rgba(0,0,0,.55);
+      border: 1px solid #000;
+      display:flex;
+      align-items:flex-end;
+      justify-content:center;
+      padding-bottom: 10px;
+      box-sizing:border-box;
+      color: var(--blackText);
+      font-size: 11px;
+      outline:none;
+    }
+    .black-key.pressed { background: var(--blackPressed); }
+
+    .kbdFooter {
+      position:absolute;
+      left: 10px; right: 10px;
+      bottom: 10px;
+      pointer-events:none;
+      display:flex;
+      justify-content: space-between;
+      opacity: .85;
+      font-size: 12px;
+      text-shadow: 0 2px 8px rgba(0,0,0,.5);
+    }
+  </style>
+</head>
+
+<body>
+<div class="app">
+  <!-- TOP AREA -->
+  <div class="topArea" id="topArea">
+    <canvas class="barsCanvas" id="bars"></canvas>
+
+    <!-- Normal topbar -->
+    <div class="topbar" id="topbar">
+      <div class="leftInfo">
+        <div class="hint" id="hint">Hold a key to sustain. Drag across keys for gliss. Multi-touch chords work.</div>
+        <div class="status" id="status">Audio: not started • MIDI: not connected</div>
+      </div>
+
+      <div class="controls">
+        <div class="group" title="Start on a C and show Do→Do across octaves">
+          <button id="prevC" class="primary" aria-label="Previous C">◀</button>
+          <label>
+            Start Do (C)
+            <input id="cIndex" type="range" min="0" max="1" step="1" value="0">
+          </label>
+          <button id="nextC" class="primary" aria-label="Next C">▶</button>
+
+          <button id="zoomOut" class="primary" title="Zoom out (more keys)">−</button>
+          <span class="badge" id="zoomBadge">15 whites</span>
+          <button id="zoomIn" class="primary" title="Zoom in (fewer keys)">+</button>
+
+          <button id="panic" class="warn" title="Stops all currently playing notes">Panic</button>
+          <button id="barsMode" class="primary" title="Hide controls into corner menu and show raising bars">Bars Mode</button>
+        </div>
+
+        <div class="group">
+          <label>
+            Volume
+            <input id="vol" type="range" min="0" max="1" step="0.01" value="0.35">
+          </label>
+
+          <label>
+            Wave
+            <select id="wave">
+              <option value="sine">Sine</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="piano-ish" selected>Piano-ish (additive)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="group">
+          <button id="midiBtn" class="primary">Enable MIDI</button>
+          <label>
+            Input
+            <select id="midiIn" disabled>
+              <option value="">(none)</option>
+            </select>
+          </label>
+
+          <label title="If ON, playing a MIDI note jumps the window to the nearest C that contains it.">
+            MIDI Jump
+            <select id="midiJump" disabled>
+              <option value="off" selected>Off</option>
+              <option value="on">On</option>
+            </select>
+          </label>
+        </div>
+
+        <details id="advanced">
+          <summary>[ADVANCED]</summary>
+          <div class="advGrid">
+            <div class="row">
+              <label>Attack <input id="attack" type="range" min="0" max="0.2" step="0.001" value="0.008"></label>
+              <label>Decay <input id="decay" type="range" min="0" max="0.5" step="0.001" value="0.06"></label>
+            </div>
+            <div class="row">
+              <label>Sustain <input id="sustain" type="range" min="0" max="1" step="0.01" value="0.85"></label>
+              <label>Release <input id="release" type="range" min="0" max="1.2" step="0.001" value="0.09"></label>
+            </div>
+
+            <div class="row">
+              <label>Detune (cents) <input id="detune" type="range" min="-30" max="30" step="1" value="0"></label>
+              <small>Applies to newly-started notes</small>
+            </div>
+
+            <div class="row">
+              <label>Filter
+                <select id="filterType">
+                  <option value="none" selected>None</option>
+                  <option value="lowpass">Lowpass</option>
+                  <option value="highpass">Highpass</option>
+                  <option value="bandpass">Bandpass</option>
+                </select>
+              </label>
+              <label>Cutoff <input id="cutoff" type="range" min="80" max="12000" step="1" value="4500"></label>
+              <label>Q <input id="q" type="range" min="0.1" max="18" step="0.1" value="1.0"></label>
+            </div>
+
+            <div class="row">
+              <label>Complex
+                <select id="complexWave">
+                  <option value="none" selected>(none)</option>
+                  <option value="organ">Organ</option>
+                  <option value="hollow">Hollow</option>
+                  <option value="buzz">Buzz</option>
+                </select>
+              </label>
+              <small>Uses PeriodicWave (harmonics)</small>
+            </div>
+
+            <div class="row">
+              <label>Bars Color <input id="barColor" type="color" value="#00ff88"></label>
+              <label>Bars Speed <input id="barSpeed" type="range" min="40" max="900" step="1" value="260"></label>
+              <small>Pixels/sec (scroll speed)</small>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- Bars Mode corner UI -->
+    <div class="cornerBtn" id="cornerBtn">
+      <button class="menuBtn" id="menuBtn" title="Show/Hide controls">☰</button>
+      <button class="menuBtn warn" id="cornerPanic" title="Panic">!</button>
+      <button class="menuBtn primary" id="exitBars" title="Exit Bars Mode">⤫</button>
+    </div>
+
+    <div class="cornerPanel" id="cornerPanel">
+      <div class="panelRow">
+        <button id="prevC2" class="primary">◀ C</button>
+        <label>Start Do (C) <input id="cIndex2" type="range" min="0" max="1" step="1" value="0"></label>
+        <button id="nextC2" class="primary">C ▶</button>
+      </div>
+
+      <div class="panelRow">
+        <button id="zoomOut2" class="primary">Zoom −</button>
+        <span class="badge" id="zoomBadge2">15 whites</span>
+        <button id="zoomIn2" class="primary">Zoom +</button>
+        <button id="panic2" class="warn">Panic</button>
+      </div>
+
+      <div class="panelRow">
+        <label>Volume <input id="vol2" type="range" min="0" max="1" step="0.01" value="0.35"></label>
+        <label>Wave
+          <select id="wave2">
+            <option value="sine">Sine</option>
+            <option value="triangle">Triangle</option>
+            <option value="square">Square</option>
+            <option value="sawtooth">Sawtooth</option>
+            <option value="piano-ish" selected>Piano-ish (additive)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="panelRow">
+        <button id="midiBtn2" class="primary">Enable MIDI</button>
+        <label>Input <select id="midiIn2" disabled><option value="">(none)</option></select></label>
+        <label>MIDI Jump <select id="midiJump2" disabled><option value="off" selected>Off</option><option value="on">On</option></select></label>
+      </div>
+
+      <div class="panelRow">
+        <label>Bars Color <input id="barColor2" type="color" value="#00ff88"></label>
+        <label>Bars Speed <input id="barSpeed2" type="range" min="40" max="900" step="1" value="260"></label>
+      </div>
+
+      <details open>
+        <summary>[ADVANCED]</summary>
+        <div class="advGrid">
+          <div class="row">
+            <label>Attack <input id="attack2" type="range" min="0" max="0.2" step="0.001" value="0.008"></label>
+            <label>Decay <input id="decay2" type="range" min="0" max="0.5" step="0.001" value="0.06"></label>
+          </div>
+          <div class="row">
+            <label>Sustain <input id="sustain2" type="range" min="0" max="1" step="0.01" value="0.85"></label>
+            <label>Release <input id="release2" type="range" min="0" max="1.2" step="0.001" value="0.09"></label>
+          </div>
+          <div class="row">
+            <label>Detune <input id="detune2" type="range" min="-30" max="30" step="1" value="0"></label>
+            <label>Filter
+              <select id="filterType2">
+                <option value="none" selected>None</option>
+                <option value="lowpass">Lowpass</option>
+                <option value="highpass">Highpass</option>
+                <option value="bandpass">Bandpass</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Cutoff <input id="cutoff2" type="range" min="80" max="12000" step="1" value="4500"></label>
+            <label>Q <input id="q2" type="range" min="0.1" max="18" step="0.1" value="1.0"></label>
+          </div>
+          <div class="row">
+            <label>Complex
+              <select id="complexWave2">
+                <option value="none" selected>(none)</option>
+                <option value="organ">Organ</option>
+                <option value="hollow">Hollow</option>
+                <option value="buzz">Buzz</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- KEYBOARD -->
+  <div class="pianoWrap">
+    <div class="keyboard" id="keyboard">
+      <div class="white-keys" id="whiteKeys"></div>
+      <div class="black-keys" id="blackKeys"></div>
+      <div class="kbdFooter">
+        <div id="rangeLeft"></div>
+        <div id="rangeRight"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // =======================
+  // Core note model
+  // =======================
+  const MIDI_MIN = 21;  // A0
+  const MIDI_MAX = 108; // C8
+  const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const IS_BLACK = (midi) => [1,3,6,8,10].includes(midi % 12);
+  const isC = (m) => (m % 12) === 0;
+
+  function midiToName(midi) {
+    const name = NOTE_NAMES[midi % 12];
+    const octave = Math.floor(midi / 12) - 1;
+    return name + octave;
+  }
+  function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+  // =======================
+  // Zoom model (white keys)
+  // 15 = 2 octaves Do→Do
+  // 22 = 3 octaves Do→Do
+  // 29 = 4 octaves Do→Do
+  // =======================
+  const zoomWhiteOptions = [15, 22, 29];
+  let zoomIdx = 0; // start at 15 whites
+
+  function whitesToSemitoneSpan(whiteCount) {
+    const octaves = (whiteCount - 1) / 7;
+    return Math.round(octaves * 12);
+  }
+
+  function computeValidStartCs(semitoneSpan) {
+    const starts = [];
+    for (let m = MIDI_MIN; m <= MIDI_MAX - semitoneSpan; m++) {
+      if (isC(m)) starts.push(m);
+    }
+    return starts;
+  }
+
+  let semitoneSpan = whitesToSemitoneSpan(zoomWhiteOptions[zoomIdx]);
+  let validStartCs = computeValidStartCs(semitoneSpan);
+
+  // =======================
+  // DOM references
+  // =======================
+  const keyboardEl = document.getElementById("keyboard");
+  const whiteKeysEl = document.getElementById("whiteKeys");
+  const blackKeysEl = document.getElementById("blackKeys");
+  const hintEl = document.getElementById("hint");
+  const statusEl = document.getElementById("status");
+  const rangeLeftEl = document.getElementById("rangeLeft");
+  const rangeRightEl = document.getElementById("rangeRight");
+
+  const cIndexEl = document.getElementById("cIndex");
+  const prevC = document.getElementById("prevC");
+  const nextC = document.getElementById("nextC");
+
+  const zoomBadge = document.getElementById("zoomBadge");
+  const zoomIn = document.getElementById("zoomIn");
+  const zoomOut = document.getElementById("zoomOut");
+
+  const volEl = document.getElementById("vol");
+  const waveEl = document.getElementById("wave");
+  const panicBtn = document.getElementById("panic");
+  const barsModeBtn = document.getElementById("barsMode");
+
+  const attackEl = document.getElementById("attack");
+  const decayEl = document.getElementById("decay");
+  const sustainEl = document.getElementById("sustain");
+  const releaseEl = document.getElementById("release");
+  const detuneEl = document.getElementById("detune");
+  const filterTypeEl = document.getElementById("filterType");
+  const cutoffEl = document.getElementById("cutoff");
+  const qEl = document.getElementById("q");
+  const complexWaveEl = document.getElementById("complexWave");
+
+  const midiBtn = document.getElementById("midiBtn");
+  const midiInSel = document.getElementById("midiIn");
+  const midiJumpSel = document.getElementById("midiJump");
+
+  const barColorEl = document.getElementById("barColor");
+  const barSpeedEl = document.getElementById("barSpeed");
+
+  const barsCanvas = document.getElementById("bars");
+  const topbar = document.getElementById("topbar");
+  const cornerBtn = document.getElementById("cornerBtn");
+  const menuBtn = document.getElementById("menuBtn");
+  const cornerPanel = document.getElementById("cornerPanel");
+  const exitBars = document.getElementById("exitBars");
+  const cornerPanic = document.getElementById("cornerPanic");
+
+  // Duplicate controls in corner panel (mirror)
+  const cIndexEl2 = document.getElementById("cIndex2");
+  const prevC2 = document.getElementById("prevC2");
+  const nextC2 = document.getElementById("nextC2");
+  const zoomBadge2 = document.getElementById("zoomBadge2");
+  const zoomIn2 = document.getElementById("zoomIn2");
+  const zoomOut2 = document.getElementById("zoomOut2");
+  const volEl2 = document.getElementById("vol2");
+  const waveEl2 = document.getElementById("wave2");
+  const midiBtn2 = document.getElementById("midiBtn2");
+  const midiInSel2 = document.getElementById("midiIn2");
+  const midiJumpSel2 = document.getElementById("midiJump2");
+  const panicBtn2 = document.getElementById("panic2");
+
+  const attackEl2 = document.getElementById("attack2");
+  const decayEl2 = document.getElementById("decay2");
+  const sustainEl2 = document.getElementById("sustain2");
+  const releaseEl2 = document.getElementById("release2");
+  const detuneEl2 = document.getElementById("detune2");
+  const filterTypeEl2 = document.getElementById("filterType2");
+  const cutoffEl2 = document.getElementById("cutoff2");
+  const qEl2 = document.getElementById("q2");
+  const complexWaveEl2 = document.getElementById("complexWave2");
+  const barColorEl2 = document.getElementById("barColor2");
+  const barSpeedEl2 = document.getElementById("barSpeed2");
+
+  // =======================
+  // Sync helpers (normal UI <-> corner UI)
+  // =======================
+  function syncToCorner() {
+    cIndexEl2.min = cIndexEl.min; cIndexEl2.max = cIndexEl.max; cIndexEl2.value = cIndexEl.value;
+    zoomBadge2.textContent = zoomBadge.textContent;
+
+    volEl2.value = volEl.value;
+    waveEl2.value = waveEl.value;
+
+    midiInSel2.disabled = midiInSel.disabled;
+    midiInSel2.innerHTML = midiInSel.innerHTML;
+    midiInSel2.value = midiInSel.value;
+
+    midiJumpSel2.disabled = midiJumpSel.disabled;
+    midiJumpSel2.value = midiJumpSel.value;
+
+    attackEl2.value = attackEl.value;
+    decayEl2.value = decayEl.value;
+    sustainEl2.value = sustainEl.value;
+    releaseEl2.value = releaseEl.value;
+
+    detuneEl2.value = detuneEl.value;
+
+    filterTypeEl2.value = filterTypeEl.value;
+    cutoffEl2.value = cutoffEl.value;
+    qEl2.value = qEl.value;
+
+    complexWaveEl2.value = complexWaveEl.value;
+
+    barColorEl2.value = barColorEl.value;
+    barSpeedEl2.value = barSpeedEl.value;
+  }
+
+  function syncFromCorner() {
+    cIndexEl.value = cIndexEl2.value;
+
+    volEl.value = volEl2.value;
+    waveEl.value = waveEl2.value;
+
+    midiInSel.value = midiInSel2.value;
+    midiJumpSel.value = midiJumpSel2.value;
+
+    attackEl.value = attackEl2.value;
+    decayEl.value = decayEl2.value;
+    sustainEl.value = sustainEl2.value;
+    releaseEl.value = releaseEl2.value;
+
+    detuneEl.value = detuneEl2.value;
+
+    filterTypeEl.value = filterTypeEl2.value;
+    cutoffEl.value = cutoffEl2.value;
+    qEl.value = qEl2.value;
+
+    complexWaveEl.value = complexWaveEl2.value;
+
+    barColorEl.value = barColorEl2.value;
+    barSpeedEl.value = barSpeedEl2.value;
+  }
+
+  // =======================
+  // Audio engine
+  // =======================
+  let audioCtx = null;
+  let master = null;
+  let currentMidiStatus = "not connected";
+
+  function ensureAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    master = audioCtx.createGain();
+    master.gain.value = Number(volEl.value);
+    master.connect(audioCtx.destination);
+    updateStatus();
+  }
+
+  function updateStatus(midiText) {
+    const a = audioCtx ? audioCtx.state : "not started";
+    const m = midiText ?? currentMidiStatus;
+    statusEl.textContent = `Audio: ${a} • MIDI: ${m}`;
+  }
+
+  function setMasterVolume(v) {
+    if (!master) return;
+    master.gain.setValueAtTime(Number(v), audioCtx.currentTime);
+  }
+
+  volEl.addEventListener("input", () => { ensureAudio(); setMasterVolume(volEl.value); syncToCorner(); });
+  volEl2.addEventListener("input", () => { syncFromCorner(); ensureAudio(); setMasterVolume(volEl.value); syncToCorner(); });
+
+  function makePeriodicWavePreset(ctx, preset) {
+    const N = 32;
+    const real = new Float32Array(N);
+    const imag = new Float32Array(N);
+    const setHarm = (n, amp) => { if (n < N) imag[n] = amp; };
+
+    if (preset === "organ") {
+      setHarm(1, 1.0); setHarm(2, 0.6); setHarm(3, 0.35); setHarm(4, 0.25);
+      setHarm(6, 0.15); setHarm(8, 0.10);
+    } else if (preset === "hollow") {
+      setHarm(1, 0.6); setHarm(3, 0.9); setHarm(5, 0.55); setHarm(7, 0.35); setHarm(9, 0.25);
+    } else if (preset === "buzz") {
+      for (let n = 1; n < N; n++) setHarm(n, 1.0 / n);
+      setHarm(1, 1.0);
+    } else {
+      return null;
+    }
+    return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+  }
+
+  function setOscillatorWaveform(osc) {
+    const complex = complexWaveEl.value;
+    if (complex !== "none") {
+      const pw = makePeriodicWavePreset(audioCtx, complex);
+      if (pw) { osc.setPeriodicWave(pw); return; }
+    }
+    const basic = waveEl.value;
+    if (basic === "piano-ish") {
+      const N = 32;
+      const real = new Float32Array(N);
+      const imag = new Float32Array(N);
+      const amps = {1:1.00, 2:0.40, 3:0.18, 4:0.10, 5:0.06, 6:0.04, 7:0.03, 8:0.02};
+      for (const [k,v] of Object.entries(amps)) imag[Number(k)] = v;
+      osc.setPeriodicWave(audioCtx.createPeriodicWave(real, imag, { disableNormalization:false }));
+    } else {
+      osc.type = basic;
+    }
+  }
+
+  function buildVoice(midiNote) {
+    ensureAudio();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+
+    const osc = audioCtx.createOscillator();
+    osc.frequency.value = midiToFreq(midiNote);
+    osc.detune.value = Number(detuneEl.value);
+    setOscillatorWaveform(osc);
+
+    const env = audioCtx.createGain();
+    env.gain.value = 0;
+
+    let nodeOut = osc;
+    const fType = filterTypeEl.value;
+    let filter = null;
+    if (fType !== "none") {
+      filter = audioCtx.createBiquadFilter();
+      filter.type = fType;
+      filter.frequency.value = Number(cutoffEl.value);
+      filter.Q.value = Number(qEl.value);
+      nodeOut.connect(filter);
+      nodeOut = filter;
+    }
+
+    nodeOut.connect(env);
+    env.connect(master);
+    return { osc, env, filter, midiNote };
+  }
+
+  function applyADSRStart(v) {
+    const now = audioCtx.currentTime;
+    const A = Number(attackEl.value);
+    const D = Number(decayEl.value);
+    const S = Number(sustainEl.value);
+    v.env.gain.cancelScheduledValues(now);
+    v.env.gain.setValueAtTime(0, now);
+    v.env.gain.linearRampToValueAtTime(1.0, now + A);
+    v.env.gain.linearRampToValueAtTime(S, now + A + D);
+  }
+
+  function applyADSRStop(v) {
+    const now = audioCtx.currentTime;
+    const R = Number(releaseEl.value);
+    v.env.gain.cancelScheduledValues(now);
+    v.env.gain.setValueAtTime(v.env.gain.value, now);
+    v.env.gain.linearRampToValueAtTime(0, now + R);
+    v.osc.stop(now + R + 0.02);
+  }
+
+  // =======================
+  // State: playing notes
+  // =======================
+  const activePointer = new Map(); // pointerId -> { voice, el, midi }
+  const activeMidi = new Map();    // midi -> { voice, el }
+
+  function noteElementByMidi(midi) {
+    return keyboardEl.querySelector(`[data-midi="${midi}"]`);
+  }
+  function pressVisual(el, on) { if (el) el.classList.toggle("pressed", !!on); }
+
+  // =======================
+  // Bars printer (FIXED)
+  // =======================
+  const bars = {
+    enabled: false,
+    ctx: null,
+    w: 0, h: 0,
+    lastT: 0,
+
+    xMap: new Map(),     // midi -> {x0,x1} in bars canvas CSS pixels
+    held: new Set(),     // midi held
+    releaseInk: new Set(),
+
+    buf: document.createElement("canvas"),
+    bctx: null,
+  };
+
+  function resizeBarsCanvas() {
+    if (!bars.enabled) return;
+
+    const rect = barsCanvas.getBoundingClientRect();
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+    barsCanvas.width = Math.floor(rect.width * dpr);
+    barsCanvas.height = Math.floor(rect.height * dpr);
+    barsCanvas.style.width = rect.width + "px";
+    barsCanvas.style.height = rect.height + "px";
+
+    bars.buf.width = barsCanvas.width;
+    bars.buf.height = barsCanvas.height;
+
+    bars.ctx = barsCanvas.getContext("2d");
+    bars.bctx = bars.buf.getContext("2d");
+
+    // Draw in CSS pixels
+    bars.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bars.bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    bars.w = rect.width;
+    bars.h = rect.height;
+
+    bars.ctx.fillStyle = "#000";
+    bars.ctx.fillRect(0, 0, bars.w, bars.h);
+
+    bars.lastT = performance.now();
+
+    requestAnimationFrame(updateBarsXMap);
+  }
+
+  function updateBarsXMap() {
+    if (!bars.enabled) return;
+
+    bars.xMap.clear();
+    const cRect = barsCanvas.getBoundingClientRect();
+    const keyEls = keyboardEl.querySelectorAll("[data-midi]");
+
+    keyEls.forEach(el => {
+      const midi = Number(el.dataset.midi);
+      if (!Number.isFinite(midi)) return;
+
+      const r = el.getBoundingClientRect();
+      const x0 = r.left - cRect.left;
+      const x1 = r.right - cRect.left;
+
+      const cx0 = Math.max(0, Math.min(bars.w, x0));
+      const cx1 = Math.max(0, Math.min(bars.w, x1));
+      if (cx1 > cx0) bars.xMap.set(midi, { x0: cx0, x1: cx1 });
+    });
+  }
+
+  function barsNoteOn(midi) {
+    if (!bars.enabled) return;
+    bars.held.add(midi);
+  }
+
+  function barsNoteOff(midi) {
+    if (!bars.enabled) return;
+    bars.held.delete(midi);
+    bars.releaseInk.add(midi); // one frame of black "ink" at bottom
+  }
+
+  function barsStep(now) {
+    if (!bars.enabled) return;
+
+    const dt = Math.max(0.001, (now - bars.lastT) / 1000);
+    bars.lastT = now;
+
+    const speed = Number(barSpeedEl.value); // px/sec
+    const dy = speed * dt;
+    const h = bars.h, w = bars.w;
+
+    const ctx = bars.ctx;
+    const bctx = bars.bctx;
+
+    // Copy current to buffer
+    bctx.clearRect(0, 0, w, h);
+    bctx.drawImage(barsCanvas, 0, 0, w, h);
+
+    // Draw buffer shifted UP by dy into main canvas
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(bars.buf, 0, 0, w, h, 0, -dy, w, h);
+
+    // Clear bottom strip
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, h - dy, w, dy);
+
+    // Released ink (black)
+    if (bars.releaseInk.size) {
+      ctx.fillStyle = "#000";
+      for (const midi of bars.releaseInk) {
+        const lane = bars.xMap.get(midi);
+        if (!lane) continue;
+        ctx.fillRect(lane.x0, h - dy, Math.max(1, lane.x1 - lane.x0), dy);
+      }
+      bars.releaseInk.clear();
+    }
+
+    // Held ink (color)
+    if (bars.held.size) {
+      ctx.fillStyle = barColorEl.value;
+      for (const midi of bars.held) {
+        const lane = bars.xMap.get(midi);
+        if (!lane) continue;
+        ctx.fillRect(lane.x0, h - dy, Math.max(1, lane.x1 - lane.x0), dy);
+      }
+    }
+
+    requestAnimationFrame(barsStep);
+  }
+
+  // =======================
+  // Note start/stop (pointer)
+  // =======================
+  function startFromPointer(pointerId, el, midi) {
+    ensureAudio();
+    stopPointer(pointerId);
+
+    const v = buildVoice(midi);
+    applyADSRStart(v);
+    v.osc.start(audioCtx.currentTime);
+
+    pressVisual(el, true);
+    activePointer.set(pointerId, { voice: v, el, midi });
+
+    hintEl.textContent = `Playing: ${midiToName(midi)}`;
+    barsNoteOn(midi);
+    updateStatus();
+  }
+
+  function stopPointer(pointerId) {
+    const data = activePointer.get(pointerId);
+    if (!data) return;
+    applyADSRStop(data.voice);
+    pressVisual(data.el, false);
+    activePointer.delete(pointerId);
+
+    if (!activeMidi.has(data.midi)) barsNoteOff(data.midi);
+  }
+
+  // =======================
+  // Note start/stop (MIDI)
+  // =======================
+  function startFromMidi(midi) {
+    ensureAudio();
+    if (activeMidi.has(midi)) return;
+
+    const v = buildVoice(midi);
+    applyADSRStart(v);
+    v.osc.start(audioCtx.currentTime);
+
+    const el = noteElementByMidi(midi);
+    pressVisual(el, true);
+    activeMidi.set(midi, { voice: v, el });
+
+    barsNoteOn(midi);
+  }
+
+  function stopFromMidi(midi) {
+    const data = activeMidi.get(midi);
+    if (!data) return;
+    applyADSRStop(data.voice);
+    pressVisual(data.el, false);
+    activeMidi.delete(midi);
+
+    for (const [, p] of activePointer.entries()) {
+      if (p.midi === midi) return;
+    }
+    barsNoteOff(midi);
+  }
+
+  function panic() {
+    for (const pid of Array.from(activePointer.keys())) stopPointer(pid);
+    for (const note of Array.from(activeMidi.keys())) stopFromMidi(note);
+
+    hintEl.textContent = "Panic: stopped all notes.";
+    setTimeout(() => {
+      hintEl.textContent = "Hold a key to sustain. Drag across keys for gliss. Multi-touch chords work.";
+    }, 900);
+  }
+
+  panicBtn.addEventListener("click", panic);
+  panicBtn2.addEventListener("click", panic);
+  cornerPanic.addEventListener("click", panic);
+  window.addEventListener("blur", panic);
+  window.addEventListener("contextmenu", e => e.preventDefault());
+
+  // =======================
+  // Rendering window
+  // =======================
+  function labelFor(midi) {
+    const name = midiToName(midi);
+    const base = name.replace(/\d+$/, "");
+    return (base === "C") ? name : base;
+  }
+
+  function renderWindow(startC) {
+    const startMidi = startC;
+    const endMidi = startMidi + semitoneSpan;
+
+    whiteKeysEl.innerHTML = "";
+    blackKeysEl.innerHTML = "";
+
+    const visible = [];
+    for (let m = startMidi; m <= endMidi; m++) visible.push(m);
+
+    const whites = visible.filter(m => !IS_BLACK(m));
+    const totalWhites = whites.length;
+
+    for (const m of whites) {
+      const div = document.createElement("div");
+      div.className = "white-key";
+      div.dataset.midi = String(m);
+      div.textContent = labelFor(m);
+      whiteKeysEl.appendChild(div);
+    }
+
+    const blackWidth = `calc(100% / ${totalWhites} * 0.60)`;
+    const whiteIndexByMidi = new Map();
+    for (let i = 0; i < whites.length; i++) whiteIndexByMidi.set(whites[i], i);
+
+    for (const m of visible) {
+      if (!IS_BLACK(m)) continue;
+      const prevWhite = m - 1;
+      const nextWhite = m + 1;
+      if (!whiteIndexByMidi.has(prevWhite) || !whiteIndexByMidi.has(nextWhite)) continue;
+
+      const li = whiteIndexByMidi.get(prevWhite);
+      const ri = whiteIndexByMidi.get(nextWhite);
+      const leftCenter = (li + 0.5) / totalWhites;
+      const rightCenter = (ri + 0.5) / totalWhites;
+      const center = (leftCenter + rightCenter) / 2;
+
+      const div = document.createElement("div");
+      div.className = "black-key";
+      div.style.left = (center * 100) + "%";
+      div.style.width = blackWidth;
+      div.dataset.midi = String(m);
+      div.textContent = midiToName(m).replace(/\d+$/, "");
+      blackKeysEl.appendChild(div);
+    }
+
+    rangeLeftEl.textContent = `${midiToName(startMidi)}`;
+    rangeRightEl.textContent = `${midiToName(endMidi)}`;
+
+    // Re-sync pressed visuals
+    for (const [note, data] of activeMidi.entries()) {
+      const el = noteElementByMidi(note);
+      data.el = el;
+      pressVisual(el, true);
+    }
+    for (const [, data] of activePointer.entries()) {
+      const el = noteElementByMidi(data.midi);
+      data.el = el;
+      pressVisual(el, true);
+    }
+
+    // Re-map bars lanes after DOM updates
+    if (bars.enabled) requestAnimationFrame(updateBarsXMap);
+  }
+
+  // =======================
+  // Window navigation + zoom
+  // =======================
+  function setZoomBadge() {
+    const whites = zoomWhiteOptions[zoomIdx];
+    zoomBadge.textContent = `${whites} whites`;
+    zoomBadge2.textContent = `${whites} whites`;
+  }
+
+  function findNearestCIndex(cMidi) {
+    let best = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < validStartCs.length; i++) {
+      const d = Math.abs(validStartCs[i] - cMidi);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  function resetStartCsForZoom() {
+    semitoneSpan = whitesToSemitoneSpan(zoomWhiteOptions[zoomIdx]);
+    validStartCs = computeValidStartCs(semitoneSpan);
+
+    cIndexEl.min = "0";
+    cIndexEl.max = String(Math.max(0, validStartCs.length - 1));
+
+    const curStart = validStartCs[Number(cIndexEl.value)] ?? validStartCs[Math.floor(validStartCs.length/2)];
+    const idx = findNearestCIndex(curStart);
+    cIndexEl.value = String(idx);
+
+    cIndexEl2.min = cIndexEl.min;
+    cIndexEl2.max = cIndexEl.max;
+    cIndexEl2.value = cIndexEl.value;
+
+    setZoomBadge();
+    renderWindow(validStartCs[Number(cIndexEl.value)]);
+    syncToCorner();
+  }
+
+  function clampCIndex(v) {
+    v = Number(v);
+    if (!Number.isFinite(v)) v = 0;
+    return Math.max(0, Math.min(validStartCs.length - 1, v));
+  }
+
+  function setCIndex(v) {
+    const idx = clampCIndex(v);
+    cIndexEl.value = String(idx);
+    cIndexEl2.value = String(idx);
+    renderWindow(validStartCs[idx]);
+    syncToCorner();
+  }
+
+  function doZoom(delta) {
+    zoomIdx = Math.max(0, Math.min(zoomWhiteOptions.length - 1, zoomIdx + delta));
+    resetStartCsForZoom();
+  }
+
+  prevC.addEventListener("click", () => setCIndex(Number(cIndexEl.value) - 1));
+  nextC.addEventListener("click", () => setCIndex(Number(cIndexEl.value) + 1));
+  cIndexEl.addEventListener("input", () => setCIndex(cIndexEl.value));
+
+  prevC2.addEventListener("click", () => setCIndex(Number(cIndexEl2.value) - 1));
+  nextC2.addEventListener("click", () => setCIndex(Number(cIndexEl2.value) + 1));
+  cIndexEl2.addEventListener("input", () => setCIndex(cIndexEl2.value));
+
+  zoomIn.addEventListener("click", () => doZoom(-1));
+  zoomOut.addEventListener("click", () => doZoom(+1));
+  zoomIn2.addEventListener("click", () => doZoom(-1));
+  zoomOut2.addEventListener("click", () => doZoom(+1));
+
+  // Mirror general setting changes
+  function onAnySettingChanged() { syncToCorner(); }
+  waveEl.addEventListener("change", onAnySettingChanged);
+  complexWaveEl.addEventListener("change", onAnySettingChanged);
+  attackEl.addEventListener("input", onAnySettingChanged);
+  decayEl.addEventListener("input", onAnySettingChanged);
+  sustainEl.addEventListener("input", onAnySettingChanged);
+  releaseEl.addEventListener("input", onAnySettingChanged);
+  detuneEl.addEventListener("input", onAnySettingChanged);
+  filterTypeEl.addEventListener("change", onAnySettingChanged);
+  cutoffEl.addEventListener("input", onAnySettingChanged);
+  qEl.addEventListener("input", onAnySettingChanged);
+  barColorEl.addEventListener("input", onAnySettingChanged);
+  barSpeedEl.addEventListener("input", onAnySettingChanged);
+
+  waveEl2.addEventListener("change", () => { syncFromCorner(); onAnySettingChanged(); });
+  complexWaveEl2.addEventListener("change", () => { syncFromCorner(); onAnySettingChanged(); });
+  attackEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  decayEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  sustainEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  releaseEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  detuneEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  filterTypeEl2.addEventListener("change", () => { syncFromCorner(); onAnySettingChanged(); });
+  cutoffEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  qEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  barColorEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+  barSpeedEl2.addEventListener("input", () => { syncFromCorner(); onAnySettingChanged(); });
+
+  // =======================
+  // Pointer input
+  // =======================
+  function keyFromPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    if (el.dataset && el.dataset.midi) return el;
+    return null;
+  }
+
+  function onPointerDown(e) {
+    const el = keyFromPoint(e.clientX, e.clientY);
+    ensureAudio();
+    if (!el) return;
+    el.setPointerCapture?.(e.pointerId);
+    const midi = Number(el.dataset.midi);
+    if (!Number.isFinite(midi)) return;
+    startFromPointer(e.pointerId, el, midi);
+  }
+
+  function onPointerMove(e) {
+    if (!activePointer.has(e.pointerId)) return;
+    const el = keyFromPoint(e.clientX, e.clientY);
+    if (!el || !el.dataset.midi) return;
+    const newMidi = Number(el.dataset.midi);
+    const cur = activePointer.get(e.pointerId);
+    if (newMidi !== cur.midi) startFromPointer(e.pointerId, el, newMidi);
+  }
+
+  function onPointerUpOrCancel(e) {
+    stopPointer(e.pointerId);
+    if (activePointer.size === 0) {
+      hintEl.textContent = "Hold a key to sustain. Drag across keys for gliss. Multi-touch chords work.";
+    }
+  }
+
+  keyboardEl.addEventListener("pointerdown", onPointerDown);
+  keyboardEl.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", onPointerUpOrCancel);
+  window.addEventListener("pointercancel", onPointerUpOrCancel);
+
+  // =======================
+  // MIDI support + Jump-to-C
+  // =======================
+  let midiAccess = null;
+  let currentInput = null;
+
+  function listMidiInputs() {
+    midiInSel.innerHTML = "";
+    const optNone = document.createElement("option");
+    optNone.value = "";
+    optNone.textContent = "(none)";
+    midiInSel.appendChild(optNone);
+
+    if (midiAccess) {
+      for (const input of midiAccess.inputs.values()) {
+        const opt = document.createElement("option");
+        opt.value = input.id;
+        opt.textContent = input.name || `MIDI Input ${input.id}`;
+        midiInSel.appendChild(opt);
+      }
+    }
+
+    midiInSel2.disabled = midiInSel.disabled;
+    midiInSel2.innerHTML = midiInSel.innerHTML;
+    midiInSel2.value = midiInSel.value;
+  }
+
+  function attachInputById(id) {
+    if (!midiAccess) return;
+
+    if (currentInput) {
+      currentInput.onmidimessage = null;
+      currentInput = null;
+    }
+
+    if (!id) {
+      currentMidiStatus = "connected (no input selected)";
+      updateStatus();
+      return;
+    }
+
+    const input = midiAccess.inputs.get(id);
+    if (!input) {
+      currentMidiStatus = "connected (input missing)";
+      updateStatus();
+      return;
+    }
+
+    currentInput = input;
+    currentInput.onmidimessage = onMidiMessage;
+    currentMidiStatus = `connected (${input.name || "input"})`;
+    updateStatus();
+  }
+
+  function maybeJumpToCForNote(midiNote) {
+    if (midiJumpSel.value !== "on") return;
+
+    // Choose a start C so that midiNote falls within [C, C+span]
+    // Start with C at/below the note's octave:
+    let candidate = midiNote - (midiNote % 12);
+
+    while (candidate > MIDI_MIN && midiNote < candidate) candidate -= 12;
+    while (midiNote > candidate + semitoneSpan) candidate += 12;
+
+    const idx = findNearestCIndex(candidate);
+    setCIndex(idx);
+  }
+
+  function onMidiMessage(ev) {
+    const [status, d1, d2] = ev.data;
+    const command = status & 0xF0;
+    const note = d1;
+
+    if (note < MIDI_MIN || note > MIDI_MAX) return;
+
+    // Note On 0x90 (vel 0 => off), Note Off 0x80
+    if (command === 0x90) {
+      const vel = d2;
+      if (vel === 0) stopFromMidi(note);
+      else {
+        maybeJumpToCForNote(note);
+        startFromMidi(note);
+      }
+    } else if (command === 0x80) {
+      stopFromMidi(note);
+    }
+  }
+
+  async function enableMidi() {
+    ensureAudio();
+    try {
+      if (!navigator.requestMIDIAccess) {
+        currentMidiStatus = "unavailable in this browser";
+        updateStatus();
+        return;
+      }
+
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+      currentMidiStatus = "connected";
+      midiInSel.disabled = false;
+      midiJumpSel.disabled = false;
+      midiInSel2.disabled = false;
+      midiJumpSel2.disabled = false;
+
+      listMidiInputs();
+
+      const first = midiAccess.inputs.values().next().value;
+      if (first) {
+        midiInSel.value = first.id;
+        midiInSel2.value = first.id;
+        attachInputById(first.id);
+      } else {
+        updateStatus("connected (no inputs)");
+      }
+
+      midiAccess.onstatechange = () => {
+        listMidiInputs();
+        if (currentInput && !midiAccess.inputs.has(currentInput.id)) attachInputById("");
+      };
+
+      updateStatus();
+      syncToCorner();
+    } catch (err) {
+      currentMidiStatus = "permission denied / error";
+      updateStatus();
+      console.warn(err);
+    }
+  }
+
+  midiBtn.addEventListener("click", enableMidi);
+  midiBtn2.addEventListener("click", enableMidi);
+
+  midiInSel.addEventListener("change", () => { attachInputById(midiInSel.value); syncToCorner(); });
+  midiInSel2.addEventListener("change", () => { syncFromCorner(); attachInputById(midiInSel.value); syncToCorner(); });
+
+  midiJumpSel.addEventListener("change", syncToCorner);
+  midiJumpSel2.addEventListener("change", () => { syncFromCorner(); syncToCorner(); });
+
+  // =======================
+  // Bars Mode toggle
+  // =======================
+  function enterBarsMode() {
+    bars.enabled = true;
+    topbar.style.display = "none";
+    barsCanvas.style.display = "block";
+    cornerBtn.style.display = "flex";
+    cornerPanel.style.display = "none";
+
+    resizeBarsCanvas();
+    requestAnimationFrame(barsStep);
+
+    // Map lanes after UI switches
+    requestAnimationFrame(updateBarsXMap);
+  }
+
+  function exitBarsModeFn() {
+    bars.enabled = false;
+    bars.held.clear();
+    bars.releaseInk.clear();
+    barsCanvas.style.display = "none";
+    cornerBtn.style.display = "none";
+    cornerPanel.style.display = "none";
+    topbar.style.display = "flex";
+  }
+
+  barsModeBtn.addEventListener("click", () => { syncToCorner(); enterBarsMode(); });
+
+  exitBars.addEventListener("click", () => { syncFromCorner(); exitBarsModeFn(); });
+
+  menuBtn.addEventListener("click", () => {
+    syncToCorner();
+    cornerPanel.style.display = (cornerPanel.style.display === "block") ? "none" : "block";
+  });
+
+  // =======================
+  // Resize handling
+  // =======================
+  window.addEventListener("resize", () => {
+    if (bars.enabled) resizeBarsCanvas();
+    if (bars.enabled) requestAnimationFrame(updateBarsXMap);
+  });
+
+  // =======================
+  // Init
+  // =======================
+  cIndexEl.min = "0";
+  cIndexEl.max = String(Math.max(0, validStartCs.length - 1));
+  cIndexEl.value = String(Math.floor(validStartCs.length / 2));
+
+  cIndexEl2.min = cIndexEl.min;
+  cIndexEl2.max = cIndexEl.max;
+  cIndexEl2.value = cIndexEl.value;
+
+  setZoomBadge();
+  renderWindow(validStartCs[Number(cIndexEl.value)]);
+  syncToCorner();
+  updateStatus();
+})();
+</script>
+</body>
+</html>
